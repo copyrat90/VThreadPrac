@@ -3,7 +3,6 @@
 #include "spinlock_mutex_win32.hpp"
 #endif
 
-#include <condition_variable>
 #include <iostream>
 #include <thread>
 #include <vector>

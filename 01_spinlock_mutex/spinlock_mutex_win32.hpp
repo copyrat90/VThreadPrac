@@ -13,8 +13,18 @@ private:
 public:
     void lock()
     {
-        while (InterlockedExchange(&_flag, 1))
-            ;
+        // Test and test-and-set variation
+        // https://rigtorp.se/spinlock/
+        for (;;)
+        {
+            if (!InterlockedExchange(&_flag, 1))
+                break;
+
+            // Simple read to aligned 32-bit variable is atomic
+            // https://learn.microsoft.com/en-us/windows/win32/sync/interlocked-variable-access
+            while (_flag)
+                YieldProcessor();
+        }
     }
 
     void unlock()

@@ -19,6 +19,8 @@ private:
 public:
     void lock()
     {
+        // Test and test-and-set variation
+        // https://rigtorp.se/spinlock/
         for (;;)
         {
             if (!_flag.test_and_set(std::memory_order_acquire))
