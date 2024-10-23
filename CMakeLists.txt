@@ -18,3 +18,4 @@ set(vtp_compile_options
 )
 
 add_subdirectory(01_spinlock_mutex)
+add_subdirectory(02_mutex)
