@@ -1,11 +1,10 @@
 #include <atomic>
+#include <format>
 #include <iostream>
-#include <stdexcept>
+#include <sstream>
 #include <thread>
 
 int result;
-
-std::atomic<int> err_both_cs_count;
 
 static_assert(std::atomic<bool>::is_always_lock_free);
 
@@ -16,48 +15,74 @@ std::atomic<bool> ready_flag;
 
 std::atomic<int> already_in_critical_section;
 
+struct flags_buffer
+{
+    int flag[2];
+    int turn;
+};
+
+std::ostream& operator<<(std::ostream& os, const flags_buffer& buf)
+{
+    os << "flag[0]: " << buf.flag[0] << "\nflag[1]: " << buf.flag[1] << "\nturn: " << buf.turn << std::endl;
+    return os;
+}
+
+flags_buffer error_flags_0, error_flags_1;
+
+void fence_print_error_flags()
+{
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    std::ostringstream oss;
+    oss << "[thread #0]\n" << error_flags_0 << "[thread #1]\n" << error_flags_1 << "\n" << std::endl;
+    std::cout << oss.str();
+}
+
 void lock_0()
 {
+    flags_buffer flags;
+
     flag[0].store(1, std::memory_order_relaxed);
+    flags.flag[0] = flag[0].load(std::memory_order_relaxed);
     turn.store(0, std::memory_order_relaxed);
+    flags.turn = turn.load(std::memory_order_relaxed);
     for (;;)
     {
-        if (!flag[1].load(std::memory_order_relaxed))
+        if (!(flags.flag[1] = flag[1].load(std::memory_order_relaxed)))
             break;
-        if (turn.load(std::memory_order_relaxed) != 0)
+        if ((flags.turn = turn.load(std::memory_order_relaxed)) != 0)
             break;
     }
 
+    error_flags_0 = flags;
     if (1 != ++already_in_critical_section)
-    {
-        ++err_both_cs_count;
-        throw std::logic_error("Both threads are in critical section");
-    }
+        fence_print_error_flags();
 }
 
 void lock_1()
 {
+    flags_buffer flags;
+
     flag[1].store(1, std::memory_order_relaxed);
+    flags.flag[1] = flag[1].load(std::memory_order_relaxed);
     turn.store(1, std::memory_order_relaxed);
+    flags.turn = turn.load(std::memory_order_relaxed);
     for (;;)
     {
-        if (!flag[0].load(std::memory_order_relaxed))
+        if (!(flags.flag[0] = flag[0].load(std::memory_order_relaxed)))
             break;
-        if (turn.load(std::memory_order_relaxed) != 1)
+        if ((flags.turn = turn.load(std::memory_order_relaxed)) != 1)
             break;
     }
 
+    error_flags_1 = flags;
     if (1 != ++already_in_critical_section)
-    {
-        ++err_both_cs_count;
-        throw std::logic_error("Both threads are in critical section");
-    }
+        fence_print_error_flags();
 }
 
 void unlock_0()
 {
     if (0 != --already_in_critical_section)
-        throw std::logic_error("Both threads are in critical section");
+        fence_print_error_flags();
 
     flag[0].store(0, std::memory_order_release);
 }
@@ -65,7 +90,7 @@ void unlock_0()
 void unlock_1()
 {
     if (0 != --already_in_critical_section)
-        throw std::logic_error("Both threads are in critical section");
+        fence_print_error_flags();
 
     flag[1].store(0, std::memory_order_release);
 }
@@ -119,5 +144,4 @@ int main()
     thread_1.join();
 
     std::cout << "result: " << result << std::endl;
-    std::cout << "err_both_cs_count: " << err_both_cs_count << std::endl;
 }

@@ -12,34 +12,48 @@ bool ready_flag;
 
 LONG already_in_critical_section;
 
+struct flags_buffer
+{
+    int flag[2];
+    int turn;
+};
+
+flags_buffer error_flags_0, error_flags_1;
+
 void lock_0()
 {
-    flag[0] = 1;
-    turn = 0;
+    flags_buffer flags;
+
+    flags.flag[0] = flag[0] = 1;
+    flags.turn = turn = 0;
     for (;;)
     {
-        if (!flag[1])
+        if (!(flags.flag[1] = flag[1]))
             break;
-        if (turn != 0)
+        if ((flags.turn = turn) != 0)
             break;
     }
 
+    error_flags_0 = flags;
     if (1 != InterlockedIncrement(&already_in_critical_section))
         DebugBreak();
 }
 
 void lock_1()
 {
-    flag[1] = 1;
-    turn = 1;
+    flags_buffer flags;
+
+    flags.flag[1] = flag[1] = 1;
+    flags.turn = turn = 1;
     for (;;)
     {
-        if (!flag[0])
+        if (!(flags.flag[0] = flag[0]))
             break;
-        if (turn != 1)
+        if ((flags.turn = turn) != 1)
             break;
     }
 
+    error_flags_1 = flags;
     if (1 != InterlockedIncrement(&already_in_critical_section))
         DebugBreak();
 }
