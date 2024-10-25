@@ -1,0 +1,5 @@
+if(MSVC)
+    add_executable(04_pseudo_producer_consumer main.cpp)
+    target_compile_options(04_pseudo_producer_consumer PRIVATE ${vtp_compile_options})
+    target_link_libraries(04_pseudo_producer_consumer PRIVATE winmm Synchronization)
+endif()

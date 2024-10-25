@@ -22,3 +22,4 @@ set(vtp_compile_options
 add_subdirectory(01_spinlock_mutex)
 add_subdirectory(02_mutex)
 add_subdirectory(03_petersons_algorithm)
+add_subdirectory(04_pseudo_producer_consumer)
