@@ -11,6 +11,8 @@ set(CMAKE_CXX_EXTENSIONS FALSE)
 include(CTest)
 enable_testing()
 
+find_package(Threads)
+
 set(vtp_compile_options
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /Zc:preprocessor /Zc:__cplusplus /source-charset:utf-8>
     $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -Wpedantic>
