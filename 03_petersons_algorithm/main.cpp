@@ -105,7 +105,18 @@ int main()
     std::cout << "expected: " << 2 * LOOP_COUNT << std::endl;
 
     auto thread_0 = (HANDLE)_beginthreadex(nullptr, 0, increase_result_0, &LOOP_COUNT, 0, nullptr);
+    if (!thread_0)
+    {
+        std::cout << "thread #0 creation failed!" << std::endl;
+        return 1;
+    }
+
     auto thread_1 = (HANDLE)_beginthreadex(nullptr, 0, increase_result_1, &LOOP_COUNT, 0, nullptr);
+    if (!thread_1)
+    {
+        std::cout << "thread #1 creation failed!" << std::endl;
+        return 1;
+    }
 
     // ready, set, GO!!
     ready_flag = true;
