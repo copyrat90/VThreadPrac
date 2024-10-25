@@ -14,7 +14,7 @@ std::atomic<bool> turn;
 
 std::atomic<bool> ready_flag;
 
-std::atomic<bool> already_in_critical_section;
+std::atomic<int> already_in_critical_section;
 
 void lock_0()
 {
@@ -28,7 +28,7 @@ void lock_0()
             break;
     }
 
-    if (already_in_critical_section.exchange(1))
+    if (1 != ++already_in_critical_section)
     {
         ++err_both_cs_count;
         throw std::logic_error("Both threads are in critical section");
@@ -47,7 +47,7 @@ void lock_1()
             break;
     }
 
-    if (already_in_critical_section.exchange(1))
+    if (1 != ++already_in_critical_section)
     {
         ++err_both_cs_count;
         throw std::logic_error("Both threads are in critical section");
@@ -56,14 +56,16 @@ void lock_1()
 
 void unlock_0()
 {
-    already_in_critical_section = 0;
+    if (0 != --already_in_critical_section)
+        throw std::logic_error("Both threads are in critical section");
 
     flag[0].store(0, std::memory_order_release);
 }
 
 void unlock_1()
 {
-    already_in_critical_section = 0;
+    if (0 != --already_in_critical_section)
+        throw std::logic_error("Both threads are in critical section");
 
     flag[1].store(0, std::memory_order_release);
 }

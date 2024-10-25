@@ -24,7 +24,7 @@ void lock_0()
             break;
     }
 
-    if (InterlockedExchange(&already_in_critical_section, 1))
+    if (1 != InterlockedIncrement(&already_in_critical_section))
         DebugBreak();
 }
 
@@ -40,20 +40,22 @@ void lock_1()
             break;
     }
 
-    if (InterlockedExchange(&already_in_critical_section, 1))
+    if (1 != InterlockedIncrement(&already_in_critical_section))
         DebugBreak();
 }
 
 void unlock_0()
 {
-    InterlockedExchange(&already_in_critical_section, 0);
+    if (0 != InterlockedDecrement(&already_in_critical_section))
+        DebugBreak();
 
     flag[0] = 0;
 }
 
 void unlock_1()
 {
-    InterlockedExchange(&already_in_critical_section, 0);
+    if (0 != InterlockedDecrement(&already_in_critical_section))
+        DebugBreak();
 
     flag[1] = 0;
 }
