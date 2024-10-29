@@ -91,7 +91,6 @@ unsigned __stdcall disconnector(void*)
 unsigned __stdcall updater(void*)
 {
     constexpr int SLEEP_DURATION = 10;
-    bool shutdown_false = false;
 
     for (;;)
     {
@@ -128,9 +127,11 @@ int main()
     {
         Sleep(1000);
 
-        AcquireSRWLockShared(&g_Connect_lock);
+        // 모니터링 하는 측에서 락을 거는건, 모니터링이 실제 코드 성능을 낮추는 것이므로 하지 않기.
+        // 어차피 찢어진 읽기가 될 가능성은 없음.
+        // AcquireSRWLockShared(&g_Connect_lock);
         const int connect = g_Connect;
-        ReleaseSRWLockShared(&g_Connect_lock);
+        // ReleaseSRWLockShared(&g_Connect_lock);
 
         std::cout << std::format("g_Connect: {}\n", connect);
     }
