@@ -1,0 +1,5 @@
+if(MSVC)
+    add_executable(05_list_thread_event main.cpp)
+    target_compile_options(05_list_thread_event PRIVATE ${vtp_compile_options})
+    target_link_libraries(05_list_thread_event PRIVATE winmm)
+endif()
