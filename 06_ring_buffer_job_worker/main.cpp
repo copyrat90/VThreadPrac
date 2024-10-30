@@ -30,7 +30,8 @@ using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
 static constexpr int WORKER_THREADS = 3;
-static constexpr Clock::duration MAIN_LOOP_WAIT_DURATION = 50ms;
+static constexpr Clock::duration MAIN_LOOP_WAIT_DURATION = 1ms;
+static constexpr Clock::duration MONITOR_DURATION = 1s;
 
 static constexpr int RING_BUFFER_SIZE = 50'000;
 
@@ -64,7 +65,10 @@ struct MsgQueue
 
 HANDLE event;
 
-unsigned __stdcall worker(void*)
+long job_process_count_all = 0;
+std::vector<long> job_process_count_per_thread;
+
+unsigned __stdcall worker(void* thread_job_process_count_addr)
 {
     const DWORD thread_id = GetCurrentThreadId();
 
@@ -105,10 +109,6 @@ unsigned __stdcall worker(void*)
             SetEvent(event);
             break;
         }
-
-        // const bool is_shared_lock = (JobMsgType::LIST_FIND == header.type || JobMsgType::LIST_PRINT == header.type);
-        // auto lock_func = (is_shared_lock) ? AcquireSRWLockShared : AcquireSRWLockExclusive;
-        // auto unlock_func = (is_shared_lock) ? ReleaseSRWLockShared : ReleaseSRWLockExclusive;
 
         switch (header.type)
         {
@@ -164,6 +164,10 @@ unsigned __stdcall worker(void*)
             std::cout << "Should not reach here\n";
             std::exit(-1); // TODO: `std::exit(-1)` 안 쓰고 종료 절차 밟기
         }
+
+        // 모니터링
+        InterlockedIncrement((long*)thread_job_process_count_addr);
+        InterlockedIncrement((long*)&job_process_count_all);
     }
 
     std::cout << std::format("Worker #{} returns\n", thread_id);
@@ -178,10 +182,13 @@ int main()
     InitializeSRWLock(&list.lock);
     InitializeSRWLock(&msg_queue.lock);
 
+    job_process_count_per_thread.resize(WORKER_THREADS, 0);
+
     std::vector<HANDLE> threads;
     threads.reserve(WORKER_THREADS);
     for (int i = 0; i < WORKER_THREADS; ++i)
-        threads.push_back((HANDLE)_beginthreadex(nullptr, 0, worker, nullptr, 0, nullptr));
+        threads.push_back(
+            (HANDLE)_beginthreadex(nullptr, 0, worker, job_process_count_per_thread.data() + i, 0, nullptr));
 
     std::mt19937 rng(std::random_device{}());
 
@@ -200,8 +207,11 @@ int main()
 
     auto now = Clock::now();
     auto next_sleep = now + MAIN_LOOP_WAIT_DURATION;
+    auto next_monitor = now + MONITOR_DURATION;
 
     JobMsgHeader header;
+
+    std::ostringstream oss;
 
     for (;;)
     {
@@ -233,6 +243,31 @@ int main()
         std::atomic_thread_fence(std::memory_order_seq_cst);
 
         SetEvent(event);
+
+        // 모니터링
+        now = Clock::now();
+        if (next_monitor <= now)
+        {
+            std::size_t msg_queue_used_space;
+            AcquireSRWLockShared(&msg_queue.lock);
+            {
+                msg_queue_used_space = msg_queue.queue.used_space();
+            }
+            ReleaseSRWLockShared(&msg_queue.lock);
+
+            oss.clear();
+            oss << "[main] MONITOR RESULT\njob queue used space: " << msg_queue_used_space
+                << "\nwhole processed jobs per sec: " << job_process_count_all << "\n";
+            for (int i = 0; i < WORKER_THREADS; ++i)
+                oss << "thread #" << i << " processed jobs per sec: " << job_process_count_per_thread[i] << "\n";
+            std::cerr << oss.str();
+
+            InterlockedExchange(&job_process_count_all, 0);
+            for (int i = 0; i < WORKER_THREADS; ++i)
+                InterlockedExchange(job_process_count_per_thread.data() + i, 0);
+
+            next_monitor += MONITOR_DURATION;
+        }
 
         // sleep
         now = Clock::now();
