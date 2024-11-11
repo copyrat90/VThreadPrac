@@ -1,9 +1,10 @@
 #include "common.hpp"
 
+#include <DirtySocks/ErrorCodes.hpp>
 #include <DirtySocks/System.hpp>
 #include <DirtySocks/TcpListener.hpp>
 #include <DirtySocks/TcpSocket.hpp>
-#include <NetBuff/SpscRingByteBuffer.hpp>
+#include <NetBuff/RingByteBuffer.hpp>
 
 #include <cassert>
 #include <cstddef>
@@ -28,12 +29,12 @@ struct Session
 
     Id id;
     ds::TcpSocket sock;
-    nb::SpscRingByteBuffer<> buf;
-    WSAOVERLAPPED send_io;
-    WSAOVERLAPPED recv_io;
+    nb::RingByteBuffer<> buf;
+    WSAOVERLAPPED overlapped;
+    bool sending;
 
     Session(Session::Id id_, ds::TcpSocket&& sock_)
-        : id(id_), sock(std::move(sock_)), buf(RING_BUF_SIZE), send_io{}, recv_io{}
+        : id(id_), sock(std::move(sock_)), buf(RING_BUF_SIZE), overlapped{}, sending(false)
     {
     }
 };
@@ -84,7 +85,52 @@ unsigned __stdcall worker(void* arg)
             continue;
         }
 
-        // TODO
+        // update ring buffer position
+        if (session->sending)
+            session->buf.move_read_pos(transferred);
+        else
+            session->buf.move_write_pos(transferred);
+
+        ds::IoBuffer io_buf[2];
+        const auto available_read = session->buf.used_space();
+        // if there's something to send
+        if (available_read > 0)
+        {
+            session->sending = true;
+
+            // async send request
+            const auto consecutive_read = session->buf.consecutive_read_length();
+            const std::size_t io_buf_count = (available_read > consecutive_read ? 2 : 1);
+            io_buf[0].buf = reinterpret_cast<char*>(session->buf.data() + session->buf.read_pos());
+            io_buf[0].len = static_cast<unsigned>(consecutive_read);
+            if (2 == io_buf_count)
+            {
+                io_buf[1].buf = reinterpret_cast<char*>(session->buf.data());
+                io_buf[1].len = static_cast<unsigned>(available_read - consecutive_read);
+            }
+            session->sock.send(std::span(io_buf).subspan(0, io_buf_count), session->overlapped, ec);
+            if (ec != ds::SystemErrc::io_pending)
+                check_ec(ec);
+        }
+        else // nothing to send
+        {
+            session->sending = false;
+
+            // async receive request
+            const auto consecutive_write = session->buf.consecutive_write_length();
+            const auto available_write = session->buf.available_space();
+            const std::size_t io_buf_count = (available_write > consecutive_write ? 2 : 1);
+            io_buf[0].buf = reinterpret_cast<char*>(session->buf.data() + session->buf.write_pos());
+            io_buf[0].len = static_cast<unsigned>(consecutive_write);
+            if (2 == io_buf_count)
+            {
+                io_buf[1].buf = reinterpret_cast<char*>(session->buf.data());
+                io_buf[1].len = static_cast<unsigned>(available_write - consecutive_write);
+            }
+            session->sock.receive(std::span(io_buf).subspan(0, io_buf_count), session->overlapped, ec);
+            if (ec != ds::SystemErrc::io_pending)
+                check_ec(ec);
+        }
     }
 
     return 0;
@@ -169,8 +215,8 @@ int main()
         // async receive request
         ds::IoBuffer io_buf[1];
         io_buf[0].buf = reinterpret_cast<char*>(session.buf.data() + session.buf.write_pos());
-        io_buf[0].len = static_cast<unsigned>(session.buf.available_write());
-        session.sock.receive(io_buf, session.recv_io, ec);
+        io_buf[0].len = static_cast<unsigned>(session.buf.available_space());
+        session.sock.receive(io_buf, session.overlapped, ec);
     }
 
     // wait for worker threads to close
