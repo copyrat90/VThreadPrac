@@ -8,16 +8,27 @@
 #include <string>
 
 static constexpr std::uint16_t PORT = 32983;
+static constexpr const char* PORT_STR = "32983";
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc != 1 && argc != 2)
+    {
+        std::cout << "Usage: 07_iocp_echo_client <IPv4 address>" << std::endl;
+        return 1;
+    }
+
     std::error_code ec;
 
     ds::System::init(ec);
     check_ec(ec);
 
+    auto addr = ds::SocketAddress::resolve(argc == 2 ? argv[1] : "localhost", PORT_STR, ds::IpVersion::V4, ec);
+    if (!addr)
+        check_ec(ec);
+
     ds::TcpSocket sock;
-    sock.connect(ds::SocketAddress(127, 0, 0, 1, PORT), ec);
+    sock.connect(*addr, ec);
     check_ec(ec);
 
     std::string input;
