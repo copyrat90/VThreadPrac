@@ -31,9 +31,10 @@ struct Session
     nb::SpscRingByteBuffer<> buf;
     WSAOVERLAPPED send_io;
     WSAOVERLAPPED recv_io;
+    LONG sending;
 
     Session(Session::Id id_, ds::TcpSocket&& sock_)
-        : id(id_), sock(std::move(sock_)), buf(RING_BUF_SIZE), send_io{}, recv_io{}
+        : id(id_), sock(std::move(sock_)), buf(RING_BUF_SIZE), recv_io{}, send_io{}, sending(false)
     {
     }
 };
@@ -84,7 +85,44 @@ unsigned __stdcall worker(void* arg)
             continue;
         }
 
-        // TODO
+        ds::IoBuffer io_buf[2];
+        // if async receive done
+        if (&session->recv_io == overlapped)
+        {
+            session->buf.move_write_pos(transferred);
+
+            // async send request
+            if (!InterlockedExchange(&session->sending, true))
+            {
+                const auto consecutive_read = session->buf.consecutive_read_length();
+                io_buf[0].buf = reinterpret_cast<char*>(session->buf.data() + session->buf.read_pos());
+                io_buf[0].len = static_cast<unsigned>(consecutive_read);
+                // WIP
+            }
+
+            // async receive request
+            const auto consecutive_write = session->buf.consecutive_write_length();
+            const auto available_write = session->buf.available_write();
+            const int io_buf_count = (available_write > consecutive_write ? 2 : 1);
+            io_buf[0].buf = reinterpret_cast<char*>(session->buf.data() + session->buf.write_pos());
+            io_buf[0].len = static_cast<unsigned>(consecutive_write);
+            if (2 == io_buf_count)
+            {
+                io_buf[1].buf = reinterpret_cast<char*>(session->buf.data());
+                io_buf[1].len = static_cast<unsigned>(available_write - consecutive_write);
+            }
+            session->sock.receive(std::span(io_buf).subspan(0, io_buf_count), session->recv_io, ec);
+        }
+        // if async send done
+        else if (&session->send_io == overlapped)
+        {
+            session->buf.move_read_pos(transferred);
+        }
+        else [[unlikely]]
+        {
+            std::cout << "tried to process invalid overlapped\n";
+            std::exit(2);
+        }
     }
 
     return 0;
