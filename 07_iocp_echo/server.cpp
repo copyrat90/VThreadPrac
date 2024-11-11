@@ -13,6 +13,7 @@
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include <Windows.h>
 #include <process.h>
@@ -65,6 +66,11 @@ unsigned __stdcall worker(void* arg)
         Session* session = nullptr;
         OVERLAPPED* overlapped = nullptr;
         const bool success = GetQueuedCompletionStatus(iocp, &transferred, (PULONG_PTR)&session, &overlapped, INFINITE);
+
+        // quit
+        if (success && !overlapped)
+            break;
+
         // disconnect session
         if (!success || !overlapped || 0 == transferred)
         {
@@ -92,13 +98,18 @@ int main()
     check_ec(ec);
 
     const unsigned cores = std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() : 4;
+    const unsigned workers_count = cores * 2;
+    std::cout << "assuming " << cores << " cores (" << workers_count << " workers)\n";
 
     // prepare iocp
     g_iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
     if (nullptr == g_iocp)
         check_ec(ds::System::get_last_error_code());
 
-    for (unsigned i = 0; i < cores * 2; ++i)
+    std::vector<HANDLE> workers;
+    workers.reserve(workers_count);
+
+    for (unsigned i = 0; i < workers_count; ++i)
     {
         auto worker_thread = reinterpret_cast<HANDLE>(_beginthreadex(nullptr, 0, worker, g_iocp, 0, nullptr));
         if (!worker_thread)
@@ -106,7 +117,7 @@ int main()
             std::cout << "worker thread #" << i << " creation failed" << std::endl;
             return -1;
         }
-        CloseHandle(worker_thread);
+        workers.push_back(worker_thread);
     }
 
     // prepare listener socket
@@ -161,6 +172,13 @@ int main()
         io_buf[0].len = static_cast<unsigned>(session.buf.available_write());
         session.sock.receive(io_buf, session.recv_io, ec);
     }
+
+    // wait for worker threads to close
+    for (std::size_t i = 0; workers.size(); ++i)
+        PostQueuedCompletionStatus(g_iocp, 0, 0, nullptr);
+    WaitForMultipleObjects(static_cast<DWORD>(workers.size()), workers.data(), true, INFINITE);
+    for (HANDLE worker : workers)
+        CloseHandle(worker);
 
     CloseHandle(g_iocp);
 
