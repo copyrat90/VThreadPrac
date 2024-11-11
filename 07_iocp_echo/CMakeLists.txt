@@ -1,7 +1,7 @@
 include(FetchContent)
 FetchContent_Declare(DirtySocks
     GIT_REPOSITORY https://github.com/copyrat90/DirtySocks.git
-    GIT_TAG scatter-gather
+    GIT_TAG main
 )
 FetchContent_MakeAvailable(DirtySocks)
 
