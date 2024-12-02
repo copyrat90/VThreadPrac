@@ -14,7 +14,7 @@ enable_testing()
 find_package(Threads)
 
 set(vtp_compile_options
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /Zc:preprocessor /Zc:__cplusplus /source-charset:utf-8>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /Zc:preprocessor /Zc:__cplusplus /utf-8>
     $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -Wpedantic>
     $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -Wpedantic>
 )
@@ -26,3 +26,4 @@ add_subdirectory(04_pseudo_producer_consumer)
 add_subdirectory(05_list_thread_event)
 add_subdirectory(06_ring_buffer_job_worker)
 add_subdirectory(07_iocp_echo)
+add_subdirectory(08_lockfree_issue_detect)
