@@ -20,14 +20,14 @@ public:
         std::thread::id tid;
         std::string_view msg;
         Param param;
-        long no;
+        std::size_t no;
         std::source_location loc;
     };
 
 public:
-    inline void log(std::string_view message, Param param, std::source_location loc = std::source_location::current())
+    void log(std::string_view message, Param param, std::source_location loc = std::source_location::current())
     {
-        const long event_idx = ++_event_index;
+        const auto event_idx = _event_index++;
         auto& entry = _logs[event_idx % MaxEntries];
 
         entry.tid = std::this_thread::get_id();
@@ -38,7 +38,7 @@ public:
     }
 
 private:
-    std::atomic<long> _event_index;
+    std::atomic<std::size_t> _event_index;
     std::array<Entry, MaxEntries> _logs;
 
     static_assert(decltype(_event_index)::is_always_lock_free);

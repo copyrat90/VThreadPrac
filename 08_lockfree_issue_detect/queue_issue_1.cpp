@@ -47,7 +47,7 @@ void worker()
 
 int main()
 {
-    g_cores = 4;
+    g_cores = 2;
 
     std::cout << "testing with " << g_cores << " cores...\n";
 
