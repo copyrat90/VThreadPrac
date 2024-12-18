@@ -28,6 +28,7 @@ namespace vtp
 static constexpr std::size_t Q_INFINITE_LOOP_COUNT = 0x4'0000'0000;
 
 template <typename T, typename Allocator>
+    requires std::is_trivially_destructible_v<T>
 class Queue
 {
 private:
@@ -197,8 +198,6 @@ public: // Modifiers
 
     auto pop() -> std::optional<T>
     {
-        std::optional<T> result;
-
         for (std::size_t i = 0;; ++i)
         {
             if (i > Q_INFINITE_LOOP_COUNT) // infinite loop test
@@ -229,6 +228,15 @@ public: // Modifiers
                 break;
             }
 
+            // data is in `old_head_next`;
+            // it should be extracted before CAS to prevent reuse before extracting.
+            _logger.log("extracting data from old_head_next:", old_head_next);
+            auto result = old_head_next->obj(); // can't move, CAS might fail
+            _logger.log("extracted data from old_head_next:", old_head_next);
+
+            // can't destroy `obj` anywhere, so `T` requires to be trivially destructible
+            // old_head_next->obj().~T();
+
             nb::TaggedPtr<Node> new_head(old_head_next.get_ptr(), old_head.get_tag() + 1);
 
             _logger.log("try move to new_head:", new_head);
@@ -244,17 +252,12 @@ public: // Modifiers
                 }
                 _logger.log("popped:", old_head);
 
-                // data is in `old_head_next`
-                _logger.log("extracting data from old_head_next:", old_head_next);
-                result.emplace(std::move(old_head_next->obj()));
-                old_head_next->obj().~T();
-                _logger.log("extracted data from old_head_next:", old_head_next);
-
                 // dealloc `old_head`
                 _logger.log("deallocating old_head:", old_head);
                 _node_pool.destroy(*old_head);
                 _logger.log("deallocated old_head:", old_head);
-                break;
+
+                return result;
             }
             else
             {
@@ -263,7 +266,7 @@ public: // Modifiers
             }
         }
 
-        return result;
+        return std::nullopt;
     }
 
 private:
