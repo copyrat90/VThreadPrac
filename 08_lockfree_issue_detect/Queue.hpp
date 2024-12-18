@@ -76,6 +76,10 @@ public:
     {
         while (pop())
             ;
+
+        assert(_head.load() == _tail.load());
+        // dealloc final dummy node
+        _node_pool.destroy(*_head.load());
     }
 
 public: // Capacity
