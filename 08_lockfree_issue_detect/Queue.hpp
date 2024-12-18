@@ -276,9 +276,10 @@ public: // Modifiers
         return std::nullopt;
     }
 
-private:
+public: // test
     nb::LockfreeObjectPool<Node, false, Allocator> _node_pool;
 
+private:
     std::atomic<nb::TaggedPtr<Node>> _head;
     std::atomic<nb::TaggedPtr<Node>> _tail;
 
