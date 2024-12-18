@@ -28,7 +28,7 @@ namespace vtp
 static constexpr std::size_t Q_INFINITE_LOOP_COUNT = 0x4'0000'0000;
 
 template <typename T, typename Allocator>
-    requires std::is_trivially_destructible_v<T>
+    requires std::is_trivially_destructible_v<T> && std::is_trivially_copy_constructible_v<T>
 class Queue
 {
 private:
@@ -210,6 +210,7 @@ public: // Modifiers
             nb::TaggedPtr<Node> old_head = _head.load();
             _logger.log(i == 0 ? "got old_head:" : "re-got old_head:", old_head);
             VTP_Q_STOP_ON_FAIL;
+            nb::TaggedPtr<Node> old_tail = _tail.load();
             nb::TaggedPtr<Node> old_head_next = old_head->next.load();
             _logger.log(i == 0 ? "got old_head_next:" : "re-got old_head_next:", old_head_next);
 
@@ -224,7 +225,13 @@ public: // Modifiers
 
             if (!old_head_next)
             {
-                _logger.log("q was empty!", old_head_next);
+                _logger.log("q was empty! old_head_next:", old_head_next);
+                break;
+            }
+
+            if (old_head == old_tail)
+            {
+                _logger.log("q was empty! old_head:", old_head);
                 break;
             }
 
