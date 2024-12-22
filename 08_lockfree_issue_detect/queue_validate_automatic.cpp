@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 constexpr int PUSH_PER_THREAD = 10'000'000;
 
@@ -32,104 +33,119 @@ struct ItemCounts
 {
     std::mutex mutex;
     std::unordered_map<std::thread::id, std::deque<std::atomic<int>>> map;
-} id_count_arrays;
+} g_id_count_arrays;
 
-std::optional<vtp::Queue<Item>> q;
+std::optional<vtp::Queue<Item>> g_queue;
 
-std::atomic<bool> ready_flag;
+std::atomic<bool> g_ready_flag;
 
-void add_id_count(const Item& item)
+void add_id_count(std::unordered_map<std::thread::id, std::vector<int>>& id_counts_map, const Item& item)
 {
-    auto it = id_count_arrays.map.find(item.tid);
-    if (it == id_count_arrays.map.end())
-        throw std::logic_error("non-existing tid");
+    auto it = id_counts_map.find(item.tid);
+    if (it == id_counts_map.end())
+    {
+        auto&& [new_it, success] = id_counts_map.try_emplace(item.tid, PUSH_PER_THREAD);
+        if (!success)
+            throw std::logic_error("duplicated tid");
+        it = new_it;
+    }
 
     auto& id_counts = it->second;
     ++id_counts[item.id];
 }
 
-void do_work(PushPopStrategy strategy)
+void do_work(PushPopStrategy strategy, const unsigned cores)
 {
-    // prepare `id_counts` for this thread
     const std::thread::id tid = std::this_thread::get_id();
-    {
-        std::lock_guard<std::mutex> guard(id_count_arrays.mutex);
-        auto&& [it, success] = id_count_arrays.map.try_emplace(tid, PUSH_PER_THREAD);
-        if (!success)
-            throw std::logic_error("duplicated tid");
-    }
+
+    // prepare `id_counts` for this thread
+    std::unordered_map<std::thread::id, std::vector<int>> id_counts_map;
+    id_counts_map.reserve(cores);
 
     // wait for start testing...
-    ready_flag.wait(false);
+    g_ready_flag.wait(false);
 
     switch (strategy)
     {
     case PushPopStrategy::PUSH_ALL_POP_ALL:
         // push all
         for (int i = 0; i < PUSH_PER_THREAD; ++i)
-            q->emplace(tid, i);
+            g_queue->emplace(tid, i);
         // wait a little bit
         std::this_thread::yield();
         // pop all
         for (int i = 0; i < PUSH_PER_THREAD; ++i)
         {
-            auto item = q->pop();
+            auto item = g_queue->pop();
             if (!item.has_value())
             {
-                q->_failed.store(true);
-                throw std::logic_error("q was empty");
+                g_queue->_failed.store(true);
+                throw std::logic_error("g_queue was empty");
             }
-            add_id_count(*item);
+            add_id_count(id_counts_map, *item);
         }
         break;
     case PushPopStrategy::PING_PONG_PUSH_POP:
         for (int i = 0; i < PUSH_PER_THREAD; ++i)
         {
             // push
-            q->emplace(tid, i);
+            g_queue->emplace(tid, i);
             // wait a little bit
             std::this_thread::yield();
             // pop
-            auto item = q->pop();
+            auto item = g_queue->pop();
             if (!item.has_value())
             {
-                q->_failed.store(true);
-                throw std::logic_error("q was empty");
+                g_queue->_failed.store(true);
+                throw std::logic_error("g_queue was empty");
             }
-            add_id_count(*item);
+            add_id_count(id_counts_map, *item);
         }
         break;
 
     default:
         throw std::logic_error(std::format("Invalid strategy = {}", static_cast<int>(strategy)));
     }
+
+    // sum results to global `g_id_count_arrays`
+    for (const auto& [tid, id_counts] : id_counts_map)
+    {
+        g_id_count_arrays.mutex.lock();
+        auto&& [it, success] = g_id_count_arrays.map.try_emplace(tid, PUSH_PER_THREAD);
+        auto& global_id_counts = it->second;
+        g_id_count_arrays.mutex.unlock();
+
+        for (int i = 0; i < PUSH_PER_THREAD; ++i)
+            global_id_counts[i].fetch_add(id_counts[i]);
+    }
 }
 
 int main()
 {
-    q.emplace();
+    g_queue.emplace();
     std::ostringstream err_oss;
-    q->_node_pool.set_err_stream(&err_oss);
+    g_queue->_node_pool.set_err_stream(&err_oss);
 
     std::mt19937 rng(std::random_device{}());
     std::uniform_int_distribution dist(0, static_cast<int>(PushPopStrategy::TOTAL) - 1);
 
     const unsigned cores = std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() : 2;
     std::cout << "Preparing " << cores << " concurrent threads...\n";
+    g_id_count_arrays.map.reserve(cores);
     std::vector<std::thread> threads;
     threads.reserve(cores);
 
     for (unsigned i = 0; i < cores; ++i)
-        threads.emplace_back(do_work, static_cast<PushPopStrategy>(dist(rng)));
+        threads.emplace_back(do_work, static_cast<PushPopStrategy>(dist(rng)), cores);
 
     // ready, set, go!
-    ready_flag.store(true);
-    ready_flag.notify_all();
+    g_ready_flag.store(true);
+    g_ready_flag.notify_all();
 
     for (auto& t : threads)
         t.join();
 
-    for (const auto& [tid, id_counts] : id_count_arrays.map)
+    for (const auto& [tid, id_counts] : g_id_count_arrays.map)
     {
         for (const auto& id_count : id_counts)
         {
@@ -141,7 +157,7 @@ int main()
         }
     }
 
-    q.reset();
+    g_queue.reset();
     std::string err_str = err_oss.str();
     if (!err_str.empty())
     {
