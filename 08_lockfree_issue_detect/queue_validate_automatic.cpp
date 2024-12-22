@@ -108,10 +108,10 @@ void do_work(PushPopStrategy strategy, const unsigned cores)
     }
 
     // sum results to global `g_id_count_arrays`
-    for (const auto& [tid, id_counts] : id_counts_map)
+    for (const auto& [item_tid, id_counts] : id_counts_map)
     {
         g_id_count_arrays.mutex.lock();
-        auto&& [it, success] = g_id_count_arrays.map.try_emplace(tid, PUSH_PER_THREAD);
+        auto&& [it, success] = g_id_count_arrays.map.try_emplace(item_tid, PUSH_PER_THREAD);
         auto& global_id_counts = it->second;
         g_id_count_arrays.mutex.unlock();
 

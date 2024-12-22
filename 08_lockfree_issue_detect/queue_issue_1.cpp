@@ -1,4 +1,4 @@
-#include "Queue.hpp"
+#include "BrokenQueue1.hpp"
 
 #include <cstddef>
 #include <iostream>
@@ -17,7 +17,7 @@ constexpr int LOOP_COUNT = 2;
 
 unsigned g_cores;
 
-vtp::Queue<int> q;
+vtp::BrokenQueue1<int> q;
 
 void worker()
 {
