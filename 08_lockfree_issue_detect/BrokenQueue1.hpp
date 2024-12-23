@@ -103,7 +103,6 @@ public: // Modifiers
     {
         Node& adding_node = _node_pool.construct();
         _logger.log("allocated adding_node:", nb::TaggedPtr<Node>(&adding_node));
-        ::new (static_cast<void*>(adding_node.data)) T(std::forward<Args>(args)...);
 
         // destroy `adding_node` on fail
         struct AddingNodeDestroyerOnFail
@@ -119,6 +118,8 @@ public: // Modifiers
                     pool.destroy(*node);
             }
         } adding_node_destroyer(&adding_node, _node_pool);
+
+        ::new (static_cast<void*>(adding_node.data)) T(std::forward<Args>(args)...);
 
         // clear the `adding_node.next` to `nullptr`
         nb::TaggedPtr<Node> old_node_next = adding_node.next.load();
