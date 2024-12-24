@@ -132,7 +132,7 @@ public: // Modifiers
         nb::TaggedPtr<Node> new_node_next(nullptr, old_node_next.get_tag());
         _logger.log("clearing adding_node.next:", old_node_next);
         VTP_Q_STOP_ON_FAIL;
-        adding_node.next.store(new_node_next, std::memory_order_relaxed);
+        adding_node.next.store(new_node_next, std::memory_order_release);
         _logger.log("cleared adding_node.next to:", new_node_next);
 
         // try push loop
@@ -261,6 +261,12 @@ public: // Modifiers
             // non-dummy node found in the queue
             else
             {
+                if (!old_head_next)
+                {
+                    _logger.log("old_head reused, old_head_next was:", old_head_next);
+                    continue;
+                }
+
                 // data is in `old_head_next`;
                 // it should be extracted before CAS to prevent reuse before extracting.
                 _logger.log("extracting data from old_head_next:", old_head_next);
