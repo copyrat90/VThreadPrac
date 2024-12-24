@@ -102,6 +102,8 @@ public: // Modifiers
     template <typename... Args>
     long emplace(Args&&... args)
     {
+        const auto size = ++_size;
+
         Node& adding_node = _node_pool.construct();
         _logger.log("allocated adding_node:", nb::TaggedPtr<Node>(&adding_node));
 
@@ -198,7 +200,7 @@ public: // Modifiers
         }
 
         adding_node_destroyer.node = nullptr;
-        return ++_size;
+        return size;
     }
 
     auto pop() -> std::optional<T>

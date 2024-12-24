@@ -103,6 +103,8 @@ public: // Modifiers
     template <typename... Args>
     auto emplace(Args&&... args) -> std::size_t
     {
+        const auto size = ++_size;
+
         // alloc `adding_node` from pool
         Node& adding_node = _node_pool.construct();
         _logger.log("allocated adding_node:", nb::TaggedPtr<Node>(&adding_node));
@@ -201,7 +203,7 @@ public: // Modifiers
         }
 
         adding_node_destroyer.node = nullptr;
-        return ++_size;
+        return size;
     }
 
     auto pop() -> std::optional<T>
@@ -311,7 +313,7 @@ private:
     std::atomic<nb::TaggedPtr<Node>> _head;
     std::atomic<nb::TaggedPtr<Node>> _tail;
 
-    std::atomic<std::size_t> _size = 0;
+    std::atomic<long> _size = 0;
 
     static_assert(decltype(_size)::is_always_lock_free);
 
