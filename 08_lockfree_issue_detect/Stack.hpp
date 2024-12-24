@@ -26,7 +26,7 @@ public:
         Node* new_node = new Node{data, old_top};
         while (!_top.compare_exchange_weak(new_node->next, new_node))
             ;
-        _logger.log("insert new_node: ",  reinterpret_cast<std::uintptr_t>(new_node));
+        _logger.log("insert new_node: ", reinterpret_cast<std::uintptr_t>(new_node));
     }
 
     auto pop() -> std::optional<T>
@@ -39,7 +39,7 @@ public:
         while (old_top && !_top.compare_exchange_weak(old_top, old_top->next))
             _logger.log("re-getting old_top: ", reinterpret_cast<std::uintptr_t>(old_top));
 
-        _logger.log("got old_top: ", reinterpret_cast<std::uintptr_t>( old_top));
+        _logger.log("got old_top: ", reinterpret_cast<std::uintptr_t>(old_top));
 
         if (old_top)
         {
@@ -57,7 +57,7 @@ private:
 
     static_assert(decltype(_top)::is_always_lock_free);
 
-    MemoryLogger<std::uintptr_t> _logger;
+    MemoryLogger<std::uintptr_t, 1 << 16> _logger;
 };
 
 } // namespace vtp
