@@ -90,12 +90,12 @@ public: // Capacity
     }
 
 public: // Modifiers
-    auto push(const T& value)-> std::size_t
+    auto push(const T& value) -> std::size_t
     {
         return emplace(value);
     }
 
-    auto push(T&& value)-> std::size_t
+    auto push(T&& value) -> std::size_t
     {
         return emplace(std::move(value));
     }
@@ -228,7 +228,7 @@ public: // Modifiers
 
             // check if `old_head_next` got from `old_head` is valid
             // via checking `old_head` was still current `_head`
-            const nb::TaggedPtr<Node> old_head_validate = _head.load();
+            const nb::TaggedPtr<Node> old_head_validate = _head.load(std::memory_order_acquire);
             if (old_head_validate != old_head)
             {
                 _logger.log("retry pop, head changed to:", old_head_validate);
