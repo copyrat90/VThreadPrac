@@ -54,6 +54,22 @@ void add_id_count(std::unordered_map<std::thread::id, std::vector<int>>& id_coun
     ++id_counts[item.id];
 }
 
+void set_max_id(std::unordered_map<std::thread::id, int>& cur_max_ids, const Item& item)
+{
+    auto it = cur_max_ids.find(item.tid);
+    if (it == cur_max_ids.end())
+    {
+        cur_max_ids[item.tid] = item.id;
+    }
+    else
+    {
+        int& max_id = it->second;
+        if (max_id >= item.id)
+            throw std::logic_error("not incremented id");
+        max_id = item.id;
+    }
+}
+
 void do_work(PushPopStrategy strategy, const unsigned cores)
 {
     const std::thread::id tid = std::this_thread::get_id();
@@ -61,6 +77,10 @@ void do_work(PushPopStrategy strategy, const unsigned cores)
     // prepare `id_counts` for this thread
     std::unordered_map<std::thread::id, std::vector<int>> id_counts_map;
     id_counts_map.reserve(cores);
+
+    // prepare increasing id test for this thread
+    std::unordered_map<std::thread::id, int> cur_max_ids;
+    cur_max_ids.reserve(cores);
 
     // wait for start testing...
     g_ready_flag.wait(false);
@@ -71,8 +91,6 @@ void do_work(PushPopStrategy strategy, const unsigned cores)
         // push all
         for (int i = 0; i < PUSH_PER_THREAD; ++i)
             g_queue->emplace(tid, i);
-        // wait a little bit
-        std::this_thread::yield();
         // pop all
         for (int i = 0; i < PUSH_PER_THREAD; ++i)
         {
@@ -82,6 +100,7 @@ void do_work(PushPopStrategy strategy, const unsigned cores)
                 g_queue->_failed.store(true);
                 throw std::logic_error("g_queue was empty");
             }
+            set_max_id(cur_max_ids, *item);
             add_id_count(id_counts_map, *item);
         }
         break;
@@ -90,8 +109,6 @@ void do_work(PushPopStrategy strategy, const unsigned cores)
         {
             // push
             g_queue->emplace(tid, i);
-            // wait a little bit
-            std::this_thread::yield();
             // pop
             auto item = g_queue->pop();
             if (!item.has_value())
@@ -99,6 +116,7 @@ void do_work(PushPopStrategy strategy, const unsigned cores)
                 g_queue->_failed.store(true);
                 throw std::logic_error("g_queue was empty");
             }
+            set_max_id(cur_max_ids, *item);
             add_id_count(id_counts_map, *item);
         }
         break;
