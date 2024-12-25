@@ -261,12 +261,6 @@ public: // Modifiers
             // non-dummy node found in the queue
             else
             {
-                if (!old_head_next)
-                {
-                    _logger.log("old_head reused, old_head_next was:", old_head_next);
-                    continue;
-                }
-
                 // data is in `old_head_next`;
                 // it should be extracted before CAS to prevent reuse before extracting.
                 _logger.log("extracting data from old_head_next:", old_head_next);
